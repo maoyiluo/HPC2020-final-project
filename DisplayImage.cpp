@@ -1,8 +1,75 @@
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
 #include <fstream>
+#include "utils.h"
 using namespace std;
 using namespace cv;
+
+
+void projection(Mat padding_src, Mat &sinogram, int num_of_angle, Point2f center, int angle_interval){
+    #pragma openmp parallel for
+    for(int i = 0; i < num_of_angle; i++){
+        double angle = angle_interval * i;
+        Mat rot = getRotationMatrix2D(center, 90-angle, 1.0);
+        Mat dst;
+        warpAffine(padding_src, dst, rot, padding_src.size());
+        double sum_of_col = 0;
+        for(int col = 0; col < dst.cols; col++){
+            sum_of_col = 0;
+            for(int row = 0; row < dst.rows; row++){
+                sum_of_col += dst.at<uchar>(row,col);
+            }
+            sinogram.at<double>(col, i) = sum_of_col;
+        }
+    }
+}
+
+void filter(Mat sinogram, Mat &filtered_sinogram, int num_of_projection){
+    Mat filter = Mat::zeros(num_of_projection, 1, CV_64F);
+    int half_num_projection = num_of_projection/2;
+    for(int i = 1; i < half_num_projection; i=i+2){
+        filter.at<double>(half_num_projection-i, 1) = -1.0/(i*i*M_PI*M_PI);
+        if(half_num_projection + i < num_of_projection)
+            filter.at<double>(half_num_projection+i, 1) = -1.0/(i*i*M_PI*M_PI);
+    }
+    filter.at<double>(half_num_projection, 1) = 1.0/4;
+    filter2D(sinogram, filtered_sinogram, sinogram.depth(), filter);
+}
+
+void backprojection(Mat &reconstruction, Mat filtered_sinogram, int num_of_projection, int num_of_angle){
+    float delta_t;
+    delta_t=1.0*M_PI/filtered_sinogram.size().width;
+    unsigned int t,f,c,rho;
+    double max_entry = 0;
+    double min_entry = 0;
+
+    #pragma openmp parallel for
+    for(f=0;f<reconstruction.size().height;f++)
+    {
+        for(c=0;c<reconstruction.size().width;c++)
+        {
+            reconstruction.at<double>(f,c)=0;
+            for(t=0;t<filtered_sinogram.size().width;t++)
+            {
+                rho= (f-0.5*num_of_projection + 0.5)*cos(delta_t*t) - (c + 0.5 -0.5*num_of_projection)*sin(delta_t*t) + 0.5*num_of_projection;
+                if((rho>=0)&&(rho<num_of_projection)) reconstruction.at<double>(f,c)+=filtered_sinogram.at<double>(rho,t);
+            }
+            if(reconstruction.at<double>(f,c)<0) reconstruction.at<double>(f,c)=0;
+            if(reconstruction.at<double>(f,c)>max_entry) max_entry = reconstruction.at<double>(f,c);
+            if(reconstruction.at<double>(f,c)<min_entry) min_entry = reconstruction.at<double>(f,c);
+        }
+    }
+
+    #pragma openmp parallel for
+    for(f=0;f<reconstruction.size().height;f++)
+    {
+        for(c=0;c<reconstruction.size().width;c++)
+        {
+            reconstruction.at<double>(f,c) = reconstruction.at<double>(f,c)/(max_entry-min_entry) * 255;
+        }
+    }
+    //rotate(reconstruction,reconstruction,ROTATE_90_CLOCKWISE);
+}
 
 int main(int argc, char** argv )
 {
@@ -35,76 +102,25 @@ int main(int argc, char** argv )
 
     Mat sinogram = Mat::zeros(num_of_projection, num_of_angle, CV_64F);
 
+    Timer tt;
     //projection
-    #pragma openmp parallel for
-    for(int i = 0; i < num_of_angle; i++){
-        double angle = angle_interval * i;
-        Mat rot = getRotationMatrix2D(center, 90-angle, 1.0);
-        Mat dst;
-        warpAffine(padding_src, dst, rot, padding_src.size());
-        double sum_of_col = 0;
-        for(int col = 0; col < dst.cols; col++){
-            sum_of_col = 0;
-            for(int row = 0; row < dst.rows; row++){
-                sum_of_col += dst.at<uchar>(row,col);
-            }
-            sinogram.at<double>(col, i) = sum_of_col;
-        }
-    }
-
+    tt.tic();
+    projection(padding_src, sinogram, num_of_angle, center, angle_interval);
     imwrite("sinogram.png", sinogram);
+    printf("Openmp Projection time: %6.4f\n", tt.toc());
 
     //filtered
-    Mat filter = Mat::zeros(num_of_projection, 1, CV_64F);
-    int half_num_projection = num_of_projection/2;
-    for(int i = 1; i < half_num_projection; i=i+2){
-        filter.at<double>(half_num_projection-i, 1) = -1.0/(i*i*M_PI*M_PI);
-        if(half_num_projection + i < num_of_projection)
-            filter.at<double>(half_num_projection+i, 1) = -1.0/(i*i*M_PI*M_PI);
-    }
-    filter.at<double>(half_num_projection, 1) = 1.0/4;
-
     Mat filtered_sinogram;
-    filter2D(sinogram, filtered_sinogram, sinogram.depth(), filter);
+    filter(sinogram, filtered_sinogram, num_of_projection);
 
     imwrite("filtered_sinogram.png", filtered_sinogram);
 
     //back projection
     Mat reconstruction(filtered_sinogram.size().height,filtered_sinogram.size().height,CV_64F);
-    float delta_t;
-    delta_t=1.0*M_PI/sinogram.size().width;
-    unsigned int t,f,c,rho;
-    double max_entry = 0;
-    double min_entry = 0;
-
-    #pragma openmp parallel for
-    for(f=0;f<reconstruction.size().height;f++)
-    {
-        for(c=0;c<reconstruction.size().width;c++)
-        {
-            reconstruction.at<double>(f,c)=0;
-            for(t=0;t<sinogram.size().width;t++)
-            {
-                rho= (f-0.5*num_of_projection + 0.5)*cos(delta_t*t) - (c + 0.5 -0.5*num_of_projection)*sin(delta_t*t) + 0.5*num_of_projection;
-                if((rho>=0)&&(rho<sinogram.size().height)) reconstruction.at<double>(f,c)+=filtered_sinogram.at<double>(rho,t);
-            }
-            if(reconstruction.at<double>(f,c)<0) reconstruction.at<double>(f,c)=0;
-            if(reconstruction.at<double>(f,c)>max_entry) max_entry = reconstruction.at<double>(f,c);
-            if(reconstruction.at<double>(f,c)<min_entry) min_entry = reconstruction.at<double>(f,c);
-        }
-    }
-
-    printf("max entry: %f\n", max_entry);
-    
-    #pragma openmp parallel for
-    for(f=0;f<reconstruction.size().height;f++)
-    {
-        for(c=0;c<reconstruction.size().width;c++)
-        {
-            reconstruction.at<double>(f,c) = reconstruction.at<double>(f,c)/(max_entry-min_entry) * 255;
-        }
-    }
-    //rotate(reconstruction,reconstruction,ROTATE_90_CLOCKWISE);
+ 
+    tt.tic();
+    backprojection(reconstruction, filtered_sinogram, num_of_projection, num_of_angle);
+    printf("Openmp backprojection time: %6.4f\n", tt.toc());
 
     imwrite("reconstructed.png", reconstruction);
     return 0;
