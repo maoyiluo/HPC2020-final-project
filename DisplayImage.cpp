@@ -52,7 +52,7 @@ void backprojection(Mat &reconstruction, Mat filtered_sinogram, int num_of_proje
             for(t=0;t<filtered_sinogram.size().width;t++)
             {
                 rho= (f-0.5*num_of_projection + 0.5)*cos(delta_t*t) - (c + 0.5 -0.5*num_of_projection)*sin(delta_t*t) + 0.5*num_of_projection;
-                //if((rho>=0)&&(rho<num_of_projection)) reconstruction.at<double>(f,c) += filtered_sinogram.at<double>(rho,t);
+                if((rho>=0)&&(rho<num_of_projection)) reconstruction.at<double>(f,c) += filtered_sinogram.at<double>(rho,t);
             }
             if(reconstruction.at<double>(f,c)<0) reconstruction.at<double>(f,c)=0;
         }
