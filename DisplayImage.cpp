@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
+#include <algorithm>    // std::max
 #include <fstream>
 #include "utils.h"
 using namespace cv;
@@ -54,21 +55,26 @@ void backprojection(Mat &reconstruction, Mat filtered_sinogram, int num_of_proje
                 if((rho>=0)&&(rho<num_of_projection)) reconstruction.at<double>(f,c)+=filtered_sinogram.at<double>(rho,t);
             }
             if(reconstruction.at<double>(f,c)<0) reconstruction.at<double>(f,c)=0;
-            if(reconstruction.at<double>(f,c)>max_entry) max_entry = reconstruction.at<double>(f,c);
-            if(reconstruction.at<double>(f,c)<min_entry) min_entry = reconstruction.at<double>(f,c);
-        }
-    }
-
-    #pragma omp parallel for
-    for(f=0;f<reconstruction.size().height;f++)
-    {
-        for(c=0;c<reconstruction.size().width;c++)
-        {
-            reconstruction.at<double>(f,c) = reconstruction.at<double>(f,c)/(max_entry-min_entry) * 255;
         }
     }
     
     //rotate(reconstruction,reconstruction,ROTATE_90_CLOCKWISE);
+}
+
+void normalization(Mat &graph){
+    double max = 0;
+    int row, col;
+    for(row = 0; row < graph.rows; row++){
+        for(col = 0; col < graph.cols; col++){
+            max = std::max(max, graph.at<double>(row,col));
+        }
+    }
+
+    for(row = 0; row < graph.rows; row++){
+        for(col = 0; col < graph.cols; col++){
+            graph.at<double>(row,col) = graph.at<double>(row,col)/max * 255;
+        }
+    }
 }
 
 int main(int argc, char** argv )
@@ -120,6 +126,7 @@ int main(int argc, char** argv )
  
     tt.tic();
     backprojection(reconstruction, filtered_sinogram, num_of_projection, num_of_angle);
+    normalization(reconstruction);
     printf("Openmp backprojection time: %6.4f\n", tt.toc());
 
     imwrite("reconstructed.png", reconstruction);
