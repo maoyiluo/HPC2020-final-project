@@ -42,34 +42,31 @@ void backprojection(Mat &reconstruction, Mat filtered_sinogram, int num_of_proje
     double max_entry = 0;
     double min_entry = 0;
 
-    #pragma omp parallel
+    #pragma omp parallel for
+    for(f=0;f<reconstruction.size().height;f++)
     {
-        #pragma omp for
-        for(f=0;f<reconstruction.size().height;f++)
+        for(c=0;c<reconstruction.size().width;c++)
         {
-            for(c=0;c<reconstruction.size().width;c++)
+            reconstruction.at<double>(f,c)=0;
+            for(t=0;t<filtered_sinogram.size().width;t++)
             {
-                reconstruction.at<double>(f,c)=0;
-                for(t=0;t<filtered_sinogram.size().width;t++)
-                {
-                    rho= (f-0.5*num_of_projection + 0.5)*cos(delta_t*t) - (c + 0.5 -0.5*num_of_projection)*sin(delta_t*t) + 0.5*num_of_projection;
-                    if((rho>=0)&&(rho<num_of_projection)) reconstruction.at<double>(f,c)+=filtered_sinogram.at<double>(rho,t);
-                }
-                if(reconstruction.at<double>(f,c)<0) reconstruction.at<double>(f,c)=0;
-                if(reconstruction.at<double>(f,c)>max_entry) max_entry = reconstruction.at<double>(f,c);
-                if(reconstruction.at<double>(f,c)<min_entry) min_entry = reconstruction.at<double>(f,c);
+                rho= (f-0.5*num_of_projection + 0.5)*cos(delta_t*t) - (c + 0.5 -0.5*num_of_projection)*sin(delta_t*t) + 0.5*num_of_projection;
+                if((rho>=0)&&(rho<num_of_projection)) reconstruction.at<double>(f,c)+=filtered_sinogram.at<double>(rho,t);
             }
+            if(reconstruction.at<double>(f,c)<0) reconstruction.at<double>(f,c)=0;
+            if(reconstruction.at<double>(f,c)>max_entry) max_entry = reconstruction.at<double>(f,c);
+            if(reconstruction.at<double>(f,c)<min_entry) min_entry = reconstruction.at<double>(f,c);
         }
+    }
 
-        #pragma omp for
-        for(f=0;f<reconstruction.size().height;f++)
+    #pragma omp parallel for
+    for(f=0;f<reconstruction.size().height;f++)
+    {
+        for(c=0;c<reconstruction.size().width;c++)
         {
-            for(c=0;c<reconstruction.size().width;c++)
-            {
-                reconstruction.at<double>(f,c) = reconstruction.at<double>(f,c)/(max_entry-min_entry) * 255;
-            }
+            reconstruction.at<double>(f,c) = reconstruction.at<double>(f,c)/(max_entry-min_entry) * 255;
         }
-    } 
+    }
     
     //rotate(reconstruction,reconstruction,ROTATE_90_CLOCKWISE);
 }
