@@ -6,7 +6,7 @@ using namespace cv;
 
 
 void projection(Mat padding_src, Mat &sinogram, int num_of_angle, Point2f center, int angle_interval){
-    #pragma openmp parallel for
+    #pragma omp parallel for
     for(int i = 0; i < num_of_angle; i++){
         double angle = angle_interval * i;
         Mat rot = getRotationMatrix2D(center, 90-angle, 1.0);
@@ -42,8 +42,9 @@ void backprojection(Mat &reconstruction, Mat filtered_sinogram, int num_of_proje
     double max_entry = 0;
     double min_entry = 0;
 
-    #pragma openmp parallel{
-        #pragma openmp for
+    #pragma omp parallel
+    {
+        #pragma omp for
         for(f=0;f<reconstruction.size().height;f++)
         {
             for(c=0;c<reconstruction.size().width;c++)
@@ -60,7 +61,7 @@ void backprojection(Mat &reconstruction, Mat filtered_sinogram, int num_of_proje
             }
         }
 
-        #pragma openmp for
+        #pragma omp for
         for(f=0;f<reconstruction.size().height;f++)
         {
             for(c=0;c<reconstruction.size().width;c++)
