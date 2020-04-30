@@ -2,7 +2,6 @@
 #include <opencv2/opencv.hpp>
 #include <fstream>
 #include "utils.h"
-using namespace std;
 using namespace cv;
 
 
