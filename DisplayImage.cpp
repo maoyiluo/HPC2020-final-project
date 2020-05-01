@@ -39,19 +39,19 @@ void filter(Mat sinogram, Mat &filtered_sinogram, int num_of_projection){
 void backprojection(Mat &reconstruction, Mat filtered_sinogram, int num_of_projection, int num_of_angle){
     float delta_t;
     delta_t=1.0*M_PI/filtered_sinogram.size().width;
-    unsigned int t,f,c,rho;
+    // unsigned int t,f,c,rho;
     double max_entry = 0;
     double min_entry = 0;
 
     #pragma omp parallel for
-    for(f=0;f<reconstruction.size().height;f++)
+    for(int f=0;f<reconstruction.size().height;f++)
     {
-        for(c=0;c<reconstruction.size().width;c++)
+        for(int c=0;c<reconstruction.size().width;c++)
         {
             reconstruction.at<double>(f,c)=0;
-            for(t=0;t<filtered_sinogram.size().width;t++)
+            for(int t=0;t<filtered_sinogram.size().width;t++)
             {
-                rho= (f-0.5*num_of_projection + 0.5)*cos(delta_t*t) - (c + 0.5 -0.5*num_of_projection)*sin(delta_t*t) + 0.5*num_of_projection;
+                int rho= (f-0.5*num_of_projection + 0.5)*cos(delta_t*t) - (c + 0.5 -0.5*num_of_projection)*sin(delta_t*t) + 0.5*num_of_projection;
                 if((rho>=0)&&(rho<num_of_projection)) reconstruction.at<double>(f,c) += filtered_sinogram.at<double>(rho,t);
             }
             if(reconstruction.at<double>(f,c)<0) reconstruction.at<double>(f,c)=0;
