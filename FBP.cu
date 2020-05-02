@@ -1,12 +1,8 @@
-#include <stdio.h>
-#include <opencv2/opencv.hpp>
-#include <algorithm>    // std::max
-#include <fstream>
 #include "utils.h"
-using namespace cv;
+#include "FBP.h"
 
 __global__ 
-void iterate(Mat &reconstruction, Mat filtered_sinogram, int num_of_angle, int num_of_projection){
+void backprojection_kernel(Mat &reconstruction, Mat filtered_sinogram, int num_of_angle, int num_of_projection){
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     double pixel = 0;
@@ -19,4 +15,23 @@ void iterate(Mat &reconstruction, Mat filtered_sinogram, int num_of_angle, int n
         if(pixel<0) pixel=0;
         reconstruction.at<double>(row,col)= pixel;
     }
+}
+
+int main(int argc, char** argv )
+{
+    Mat src;
+    src = imread( argv[1], 0);
+
+
+
+    //back projection
+    Mat reconstruction(filtered_sinogram.size().height,filtered_sinogram.size().height,CV_64F);
+ 
+    tt.tic();
+    backprojection(reconstruction, filtered_sinogram, num_of_projection, num_of_angle);
+    normalization(reconstruction);
+    printf("Openmp backprojection time: %6.4f\n", tt.toc());
+
+    imwrite("reconstructed.png", reconstruction);
+    return 0;
 }
