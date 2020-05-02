@@ -51,8 +51,8 @@ int main(int argc, char** argv )
     const dim3 grid((num_of_projection + block.x - 1)/block.x, (num_of_projection  + block.y - 1)/block.y);
 
     backprojection_kernel<<<grid, block>>>(reconstruction_device, sinogram_device, num_of_angle, num_of_projection);
-    udaMemcpy(reconstruction.ptr(),reconstruction_device, cudaMemcpyDeviceToHost);
-
+    cudaDeviceSynchronize();
+    cudaMemcpy(reconstruction.ptr(),reconstruction_device, cudaMemcpyDeviceToHost);
     normalization(reconstruction);
     printf("Openmp backprojection time: %6.4f\n", tt.toc());
 
