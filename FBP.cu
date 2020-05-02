@@ -38,21 +38,23 @@ int main(int argc, char** argv )
  
     //back projection
     Mat reconstruction(filtered_sinogram.size().height,filtered_sinogram.size().height,CV_64F);
- 
+  
+    Timer tt;
     tt.tic();
     backprojection(reconstruction, filtered_sinogram, num_of_projection, num_of_angle);
 
-    double* reconstruction_device, sinogram_device;
+    double* reconstruction_device;
+    double* sinogram_device;
     cudaMalloc<double>(&reconstruction_device, num_of_projection * num_of_projection);
     cudaMalloc<double>(&sinogram_device, num_of_projection*num_of_angle);
 
-    cudaMemcpy(sinogram_device,filtered_sinogram.ptr(),num_of_projection * num_of_projection,cudaMemcpyHostToDevice)
-    const dim3 block(256,256);
-    const dim3 grid((num_of_projection + block.x - 1)/block.x, (num_of_projection  + block.y - 1)/block.y);
+    cudaMemcpy(sinogram_device,filtered_sinogram.ptr(),num_of_projection * num_of_projection,cudaMemcpyHostToDevice);
+    dim3 block(256,256);
+    dim3 grid((num_of_projection + block.x - 1)/block.x, (num_of_projection  + block.y - 1)/block.y);
 
     backprojection_kernel<<<grid, block>>>(reconstruction_device, sinogram_device, num_of_angle, num_of_projection);
     cudaDeviceSynchronize();
-    cudaMemcpy(reconstruction.ptr(),reconstruction_device, cudaMemcpyDeviceToHost);
+    cudaMemcpy(reconstruction.ptr(),reconstruction_device, num_of_projection * num_of_projection*sizeof(double), cudaMemcpyDeviceToHost);
     normalization(reconstruction);
     printf("Openmp backprojection time: %6.4f\n", tt.toc());
 
