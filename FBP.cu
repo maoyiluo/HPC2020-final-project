@@ -58,6 +58,6 @@ int main(int argc, char** argv )
     normalization(reconstruction);
     printf("Openmp backprojection time: %6.4f\n", tt.toc());
 
-    imwrite("reconstructed.png", reconstruction);
+    imwrite("reconstructed_cuda.png", reconstruction);
     return 0;
 }
