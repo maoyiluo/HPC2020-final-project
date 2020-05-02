@@ -2,7 +2,9 @@
 #include "FBP.h"
 
 __global__ 
-void backprojection_kernel(Mat &reconstruction, Mat filtered_sinogram, int num_of_angle, int num_of_projection){
+void backprojection_kernel(double *reconstruction, double* filtered_sinogram, int num_of_angle, int num_of_projection){
+    float delta_t;
+    delta_t=1.0*M_PI/num_of_angle;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     double pixel = 0;
@@ -10,10 +12,10 @@ void backprojection_kernel(Mat &reconstruction, Mat filtered_sinogram, int num_o
         for(int t=0; t<num_of_angle; t++)
         {
             int rho= (row-0.5*num_of_projection + 0.5)*cos(delta_t*t) - (col + 0.5 -0.5*num_of_projection)*sin(delta_t*t) + 0.5*num_of_projection;
-            if((rho>=0)&&(rho<num_of_projection)) pixel += filtered_sinogram.at<double>(rho,t);
+            if((rho>=0)&&(rho<num_of_projection)) pixel += filtered_sinogram[rho * num_of_projection + t];
         }
         if(pixel<0) pixel=0;
-        reconstruction.at<double>(row,col)= pixel;
+        reconstruction[row * num_of_projection + col]= pixel;
     }
 }
 
@@ -21,14 +23,36 @@ int main(int argc, char** argv )
 {
     Mat src;
     src = imread( argv[1], 0);
+    Mat filtered_sinogram;
 
+    //projection and filtered
+    projection_filtered_timing(src, filtered_sinogram);
+    imwrite("filtered_sinogram.png", filtered_sinogram);
 
-
+    int height = src.rows;
+    int weight = src.cols;
+    double diagonal = sqrt(height * height + weight * weight);
+    int num_of_angle = 180;
+    int num_of_projection = diagonal;
+    int angle_interval = 180/num_of_angle;
+ 
     //back projection
     Mat reconstruction(filtered_sinogram.size().height,filtered_sinogram.size().height,CV_64F);
  
     tt.tic();
     backprojection(reconstruction, filtered_sinogram, num_of_projection, num_of_angle);
+
+    double* reconstruction_device, sinogram_device;
+    cudaMalloc<double>(&reconstruction_device, num_of_projection * num_of_projection);
+    cudaMalloc<double>(&sinogram_device, num_of_projection*num_of_angle);
+
+    cudaMemcpy(sinogram_device,filtered_sinogram.ptr(),num_of_projection * num_of_projection,cudaMemcpyHostToDevice)
+    const dim3 block(256,256);
+    const dim3 grid((num_of_projection + block.x - 1)/block.x, (num_of_projection  + block.y - 1)/block.y);
+
+    backprojection_kernel<<<grid, block>>>(reconstruction_device, sinogram_device, num_of_angle, num_of_projection);
+    udaMemcpy(reconstruction.ptr(),reconstruction_device, cudaMemcpyDeviceToHost);
+
     normalization(reconstruction);
     printf("Openmp backprojection time: %6.4f\n", tt.toc());
 
