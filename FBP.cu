@@ -1,5 +1,6 @@
 #include "utils.h"
 #include "FBP.h"
+#include <omp.h>
 
 
 __global__
