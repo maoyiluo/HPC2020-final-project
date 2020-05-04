@@ -102,6 +102,7 @@ int main(int argc, char** argv )
     double* filtered_sinogram_device;
     double* filtered_device;
     tt.tic();
+    double omp_time = omp_get_wtime();
     cudaMalloc<double>(&sinogram_device, num_of_projection*num_of_angle);
     cudaMalloc<double>(&filtered_sinogram_device, num_of_projection*num_of_angle);
     cudaMalloc<double>(&filtered_device, num_of_projection);
@@ -113,6 +114,7 @@ int main(int argc, char** argv )
     cudaDeviceSynchronize();
     cudaMemcpy(filter.ptr(),filtered_device, num_of_projection*sizeof(double), cudaMemcpyDeviceToHost);
     printf("Cuda filtered time: %6.4f\n", tt.toc());
+    printf("Cuda omp_get_wtime filtered time: %6.4f\n", omp_get_wtime() - omp_time);
 
     //back projection
     Mat reconstruction(filtered_sinogram.size().height,filtered_sinogram.size().height,CV_64F);
@@ -124,6 +126,7 @@ int main(int argc, char** argv )
     double* reconstruction_device;
 
     tt.tic();
+    omp_time = omp_get_wtime();
     cudaMalloc<double>(&reconstruction_device, num_of_projection * num_of_projection);
     
     cudaMemcpy(sinogram_device,filtered_sinogram.ptr(),num_of_projection * num_of_projection,cudaMemcpyHostToDevice);
@@ -134,6 +137,7 @@ int main(int argc, char** argv )
     cudaDeviceSynchronize();
     cudaMemcpy(reconstruction.ptr(),reconstruction_device, num_of_projection * num_of_projection*sizeof(double), cudaMemcpyDeviceToHost);
     printf("cuda backprojection time: %6.4f\n", tt.toc());
+    printf("Cuda omp_get_wtime filtered time: %6.4f\n", omp_get_wtime() - omp_time);
     normalization(reconstruction);
 
     imwrite("reconstructed_cuda.png", reconstruction);

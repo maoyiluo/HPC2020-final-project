@@ -130,6 +130,8 @@ void projection_filtered_timing(Mat src, Mat &filtered_sinogram)
     int padding_right = (diagonal - weight) / 2;
     Mat padding_src;
     copyMakeBorder(src, padding_src, padding_top, padding_bottom, padding_left, padding_right, BORDER_CONSTANT, 0);
+
+    imwrite("padding.png", padding_src);
     Point2f center((padding_src.cols - 1) / 2.0, (padding_src.rows - 1) / 2.0);
 
     int max_pixel = 0;
