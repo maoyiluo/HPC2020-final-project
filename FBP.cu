@@ -1,6 +1,22 @@
 #include "utils.h"
 #include "FBP.h"
 
+
+__global__
+void filtered_kernel(double *sinogram_device, double* filtered_sinogram, double* filter,int num_of_projection, int num_of_angle){
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    double local_sum = 0;
+    if(row < num_of_projection && col < num_of_projection){
+        for (int k = 0; k < num_of_projection; k++)
+        {
+            if(half_num_projection + row - k >=0)
+                sum += sinogram[k * num_of_angle + col] * filter[half_num_projection + row - k];
+        }
+        filtered_sinogram[row * num_of_angle + col] = sum;
+    }
+}
+
 __global__ 
 void backprojection_kernel(double *reconstruction, double* filtered_sinogram, int num_of_angle, int num_of_projection){
     float delta_t;
@@ -42,9 +58,11 @@ int main(int argc, char** argv )
     Timer tt;
     tt.tic();
     backprojection(reconstruction, filtered_sinogram, num_of_projection, num_of_angle);
+    printf("Openmp backprojection time: %6.4f\n", tt.toc());
 
     double* reconstruction_device;
     double* sinogram_device;
+    tt.tic();
     cudaMalloc<double>(&reconstruction_device, num_of_projection * num_of_projection);
     cudaMalloc<double>(&sinogram_device, num_of_projection*num_of_angle);
 
@@ -55,8 +73,8 @@ int main(int argc, char** argv )
     backprojection_kernel<<<grid, block>>>(reconstruction_device, sinogram_device, num_of_angle, num_of_projection);
     cudaDeviceSynchronize();
     cudaMemcpy(reconstruction.ptr(),reconstruction_device, num_of_projection * num_of_projection*sizeof(double), cudaMemcpyDeviceToHost);
+    printf("cuda backprojection time: %6.4f\n", tt.toc());
     normalization(reconstruction);
-    printf("Openmp backprojection time: %6.4f\n", tt.toc());
 
     imwrite("reconstructed_cuda.png", reconstruction);
     return 0;
