@@ -31,6 +31,7 @@ void filter(Mat sinogram, Mat &filtered_sinogram, int num_of_projection)
 {
     Mat filter = Mat::zeros(num_of_projection, 1, CV_64F);
     int half_num_projection = num_of_projection / 2;
+    #pragma omp parallel for
     for (int i = 1; i < half_num_projection; i = i + 2)
     {
         filter.at<double>(half_num_projection - i, 1) = -1.0 / (i * i * M_PI * M_PI);
@@ -38,18 +39,7 @@ void filter(Mat sinogram, Mat &filtered_sinogram, int num_of_projection)
             filter.at<double>(half_num_projection + i, 1) = -1.0 / (i * i * M_PI * M_PI);
     }
     filter.at<double>(half_num_projection, 1) = 1.0 / 4;
-    //filter2D(sinogram, filtered_sinogram, sinogram.depth(), filter);
-    filtered_sinogram = Mat::zeros(num_of_projection, sinogram.cols, CV_64F);
-    for (int i = 0; i < sinogram.cols; i++)
-    {
-        for (int j = 0; j < sinogram.rows; j++)
-        {
-            for (int k = 0; k < num_of_projection; k++)
-            {
-                filtered_sinogram.at<double>(j, i) += sinogram.at<double>(k,i) * filter.at<double>(half_num_projection + j -k, 1);
-            }
-        }
-    }
+    filter2D(sinogram, filtered_sinogram, sinogram.depth(), filter);
 }
 
 void my_filter(Mat sinogram, Mat &filtered_sinogram, int num_of_projection)

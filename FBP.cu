@@ -43,30 +43,89 @@ int main(int argc, char** argv )
     Mat filtered_sinogram;
 
     //projection and filtered
-    projection_filtered_timing(src, filtered_sinogram);
-    imwrite("filtered_sinogram.png", filtered_sinogram);
-
     int height = src.rows;
     int weight = src.cols;
+
     double diagonal = sqrt(height * height + weight * weight);
+    int padding_top = (diagonal - height) / 2;
+    int padding_bottom = (diagonal - height) / 2;
+    int padding_left = (diagonal - weight) / 2;
+    int padding_right = (diagonal - weight) / 2;
+    Mat padding_src;
+    copyMakeBorder(src, padding_src, padding_top, padding_bottom, padding_left, padding_right, BORDER_CONSTANT, 0);
+    Point2f center((padding_src.cols - 1) / 2.0, (padding_src.rows - 1) / 2.0);
+
+    int max_pixel = 0;
+    for (int i = 0; i < padding_src.rows; i++)
+    {
+        for (int j = 0; j < padding_src.cols; j++)
+        {
+            if (padding_src.at<uchar>(i, j) > max_pixel)
+                max_pixel = padding_src.at<uchar>(i, j);
+        }
+    }
+
     int num_of_angle = 180;
     int num_of_projection = diagonal;
-    int angle_interval = 180/num_of_angle;
- 
+    int angle_interval = 180 / num_of_angle;
+
+    Mat sinogram = Mat::zeros(num_of_projection, num_of_angle, CV_64F);
+
+    Timer tt;
+    //projection
+    tt.tic();
+    projection(padding_src, sinogram, num_of_angle, center, angle_interval);
+    imwrite("sinogram.png", sinogram);
+    printf("Openmp Projection time: %6.4f\n", tt.toc());
+
+    //opencv convolution filtered
+    tt.tic();
+    filter(sinogram, filtered_sinogram, num_of_projection);
+    printf("opencv filtered time: %6.4f\n", tt.toc());
+
+    //openmp convolution
+    tt.tic();
+    my_filter(sinogram, filtered_sinogram, num_of_projection);
+    printf("Openmp filtered time: %6.4f\n", tt.toc());
+
+    //cuda convolution
+    Mat filter = Mat::zeros(num_of_projection, 1, CV_64F);
+    int half_num_projection = num_of_projection / 2;
+    #pragma omp parallel for
+    for (int i = 1; i < half_num_projection; i = i + 2)
+    {
+        filter.at<double>(half_num_projection - i, 1) = -1.0 / (i * i * M_PI * M_PI);
+        if (half_num_projection + i < num_of_projection)
+            filter.at<double>(half_num_projection + i, 1) = -1.0 / (i * i * M_PI * M_PI);
+    }
+    double* sinogram_device;
+    double* filtered_sinogram_device;
+    double* filtered_device;
+    tt.tic();
+    cudaMalloc<double>(&sinogram_device, num_of_projection*num_of_angle);
+    cudaMalloc<double>(&filtered_sinogram_device, num_of_projection*num_of_angle);
+    cudaMalloc<double>(&filtered_device, num_of_projection);
+    cudaMemcpy(sinogram_device,sinogram.ptr(),num_of_projection * num_of_projection,cudaMemcpyHostToDevice);
+    cudaMemcpy(filtered_device,filter.ptr(),num_of_projection,cudaMemcpyHostToDevice);
+    dim3 filter_block(256, 256);
+    dim3 filter_grid((num_of_angle + 256- 1)/256, (num_of_projection  + 256 - 1)/256)
+    filtered_kernel<<<filter_grid, filter_block>>>(sinogram_device, filtered_sinogram_device, filtered_device, num_of_projection, num_of_angle);
+    cudaDeviceSynchronize();
+    cudaMemcpy(filter.ptr(),filtered_device, num_of_projection*sizeof(double), cudaMemcpyDeviceToHost);
+    printf("Cuda filtered time: %6.4f\n", tt.toc());
+
     //back projection
     Mat reconstruction(filtered_sinogram.size().height,filtered_sinogram.size().height,CV_64F);
   
-    Timer tt;
     tt.tic();
     backprojection(reconstruction, filtered_sinogram, num_of_projection, num_of_angle);
     printf("Openmp backprojection time: %6.4f\n", tt.toc());
 
     double* reconstruction_device;
-    double* sinogram_device;
+
     tt.tic();
     cudaMalloc<double>(&reconstruction_device, num_of_projection * num_of_projection);
-    cudaMalloc<double>(&sinogram_device, num_of_projection*num_of_angle);
-
+    
     cudaMemcpy(sinogram_device,filtered_sinogram.ptr(),num_of_projection * num_of_projection,cudaMemcpyHostToDevice);
     dim3 block(256,256);
     dim3 grid((num_of_projection + block.x - 1)/block.x, (num_of_projection  + block.y - 1)/block.y);
