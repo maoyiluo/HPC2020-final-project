@@ -108,7 +108,7 @@ int main(int argc, char** argv )
     cudaMemcpy(sinogram_device,sinogram.ptr(),num_of_projection * num_of_projection,cudaMemcpyHostToDevice);
     cudaMemcpy(filtered_device,filter.ptr(),num_of_projection,cudaMemcpyHostToDevice);
     dim3 filter_block(256, 256);
-    dim3 filter_grid((num_of_angle + 256- 1)/256, (num_of_projection  + 256 - 1)/256)
+    dim3 filter_grid((num_of_angle + 256- 1)/256, (num_of_projection  + 256 - 1)/256);
     filtered_kernel<<<filter_grid, filter_block>>>(sinogram_device, filtered_sinogram_device, filtered_device, num_of_projection, num_of_angle);
     cudaDeviceSynchronize();
     cudaMemcpy(filter.ptr(),filtered_device, num_of_projection*sizeof(double), cudaMemcpyDeviceToHost);
