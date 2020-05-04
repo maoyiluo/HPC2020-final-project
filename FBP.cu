@@ -7,13 +7,14 @@ void filtered_kernel(double *sinogram_device, double* filtered_sinogram, double*
     int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     double local_sum = 0;
+    int half_num_projection = num_of_projection/2;
     if(row < num_of_projection && col < num_of_projection){
         for (int k = 0; k < num_of_projection; k++)
         {
             if(half_num_projection + row - k >=0)
-                sum += sinogram[k * num_of_angle + col] * filter[half_num_projection + row - k];
+            local_sum += sinogram_device[k * num_of_angle + col] * filter[half_num_projection + row - k];
         }
-        filtered_sinogram[row * num_of_angle + col] = sum;
+        filtered_sinogram[row * num_of_angle + col] = local_sum;
     }
 }
 
